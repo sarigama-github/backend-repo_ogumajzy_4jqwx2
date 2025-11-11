@@ -1,8 +1,14 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from datetime import date
 
-app = FastAPI()
+from database import create_document
+from schemas import Betasignup
+
+app = FastAPI(title="Wedplan API", description="API for Wedplan landing page", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +69,30 @@ def test_database():
     response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
     
     return response
+
+# Request model for direct validation too (frontend can send ISO date string)
+class BetaSignupRequest(BaseModel):
+    name: str
+    email: EmailStr
+    city: str
+    wedding_date: Optional[date] = None
+    language: Optional[str] = None
+
+@app.post("/api/beta-signup")
+def beta_signup(payload: BetaSignupRequest):
+    try:
+        # Validate via Pydantic schema used by DB to ensure collection consistency
+        doc = Betasignup(
+            name=payload.name,
+            email=payload.email,
+            city=payload.city,
+            wedding_date=payload.wedding_date,
+            language=payload.language,
+        )
+        inserted_id = create_document("betasignup", doc)
+        return {"status": "ok", "id": inserted_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 if __name__ == "__main__":
